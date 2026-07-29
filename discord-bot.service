@@ -1,0 +1,112 @@
+# =============================================================================
+# discord-bot.service — template durci pour un bot Discord.js (Node.js)
+# Remplace <NOM_BOT> et <UTILISATEUR>, renomme en <nom-bot>.service avant
+# d'installer.
+# =============================================================================
+#
+# INSTALLATION
+#   sudo cp discord-bot.service /etc/systemd/system/<nom-bot>.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now <nom-bot>.service
+#
+# VÉRIFICATION
+#   systemctl status <nom-bot>.service
+#   journalctl -u <nom-bot>.service -f
+#
+# =============================================================================
+
+[Unit]
+Description=<NOM_BOT> Discord Bot
+After=network-online.target
+Wants=network-online.target
+# Fenêtre glissante pour le compteur de redémarrages
+StartLimitIntervalSec=120
+# Au-delà de 5 crashs dans la fenêtre, systemd abandonne (anti crash-loop)
+StartLimitBurst=5
+
+[Service]
+WorkingDirectory=/home/<UTILISATEUR>/Bots/<NOM_BOT>
+# Marge après network-online.target (à retirer si pas nécessaire, voir After=/Wants= pour une vraie dépendance)
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/local/bin/node index.js
+
+Restart=always
+RestartSec=5
+# Code 127 = binaire/chemin introuvable → pas de boucle de redémarrage inutile
+RestartPreventExitStatus=127
+
+User=<UTILISATEUR>
+Environment=NODE_ENV=production
+# Limite le threadpool libuv (bot léger, pas besoin de plus)
+Environment=UV_THREADPOOL_SIZE=2
+# Fichiers créés par le bot non lisibles par les autres utilisateurs
+UMask=0077
+# Sinon tous les bots Node.js apparaissent sous le même nom "node" dans les logs
+SyslogIdentifier=<NOM_BOT>
+
+# Légèrement prioritaire (bot temps réel = réactivité aux messages)
+Nice=-5
+IOSchedulingClass=best-effort
+# Milieu de gamme, ne monopolise pas l'I/O face aux autres services
+IOSchedulingPriority=4
+
+# Seuil de throttling mémoire (soft limit) — ex: 3 bots x 2 Go = 6 Go, reste 10 Go pour OS/cache/AdGuard Home
+MemoryHigh=1500M
+# Seuil dur : OOM kill du service au-delà
+MemoryMax=2G
+# Ex: 3 bots x 150% = 450% sur 800% dispo (8 coeurs) → marge pour l'OS et AdGuard Home
+CPUQuota=150%
+# Sockets Discord/API + fichiers ouverts
+LimitNOFILE=65536
+LimitNPROC=512
+# Rend ce bot plus sacrifiable qu'un service critique (ex: AdGuard Home, score par défaut) en cas de pression mémoire
+OOMScoreAdjust=200
+
+# Le process ne peut jamais gagner plus de privilèges qu'au démarrage
+NoNewPrivileges=true
+# /tmp dédié et isolé des autres services
+PrivateTmp=true
+# Accès uniquement aux devices inoffensifs (null, zero, random, tty)
+PrivateDevices=true
+# User namespace dédié (root du service ≠ root réel)
+PrivateUsers=true
+# /usr, /boot, /etc en lecture seule pour le service
+ProtectSystem=strict
+# /home, /root en lecture seule...
+ProtectHome=read-only
+# ...sauf le dossier du bot, explicitement en écriture
+ReadWritePaths=/home/<UTILISATEUR>/Bots/<NOM_BOT>
+# /proc/sys, /sys en lecture seule (pas de sysctl depuis le service)
+ProtectKernelTunables=true
+# Interdit le chargement de modules noyau
+ProtectKernelModules=true
+# /sys/fs/cgroup en lecture seule
+ProtectControlGroups=true
+# Ne voit pas les process des autres utilisateurs dans /proc
+ProtectProc=invisible
+# Ne peut pas modifier l'horloge système
+ProtectClock=true
+# Ne peut pas changer le hostname
+ProtectHostname=true
+# Pas d'accès au buffer dmesg
+ProtectKernelLogs=true
+# Bloque personality() (anti-désactivation d'ASLR)
+LockPersonality=true
+# Pas d'ordonnancement temps réel (SCHED_FIFO/RR)
+RestrictRealtime=true
+# Le bot lui-même ne peut pas créer de nouveaux namespaces
+RestrictNamespaces=true
+# Ne peut pas créer de fichiers setuid/setgid
+RestrictSUIDSGID=true
+# Bloque les appels système d'une autre architecture (anti-shellcode étranger)
+SystemCallArchitectures=native
+# Liste blanche seccomp : autorise seulement les syscalls usuels d'un service
+SystemCallFilter=@system-service
+# Aucune capability Linux : un bot Discord n'en a besoin d'aucune
+CapabilityBoundingSet=
+
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
